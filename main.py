@@ -38,8 +38,30 @@ OPTION_LABEL_RE = re.compile(r"^\s*[\(\[]?(\d{1,2}|[A-Za-z]|[ivxlcdmIVXLCDM]{1,4
 def index():
     return render_template('index.html')
 
+def get_formatted_text_from_runs(runs):
+    """Return text with formatting tags for bold, italic, underline."""
+    formatted = ""
+    for run in runs:
+        text = run.text
+        if not text:
+            continue
+        open_tags = ""
+        close_tags = ""
+        if run.bold:
+            open_tags += "<b>"
+            close_tags = "</b>" + close_tags
+        if run.italic:
+            open_tags += "<i>"
+            close_tags = "</i>" + close_tags
+        if run.underline:
+            open_tags += "<u>"
+            close_tags = "</u>" + close_tags
+        formatted += f"{open_tags}{text}{close_tags}"
+    return formatted
+
 def get_full_paragraph_text(para, list_counter):
-    text = para.text.strip()
+    # Use formatted text from runs
+    text = get_formatted_text_from_runs(para.runs).strip()
     p = para._element
     is_list_item = p.xpath(".//w:numPr")
     
@@ -343,20 +365,20 @@ def extract_questions_from_docx(file):
 
     print(f"Starting question extraction from DOCX with {len(doc.paragraphs)} paragraphs")
 
-    # First pass: extract question text
+    # First pass: extract question text with formatting
     for para in doc.paragraphs:
         text = get_full_paragraph_text(para, list_counter)
 
         if not text:
             continue  # Skip empty paragraphs
 
-        if question_pattern.match(text):
+        if question_pattern.match(para.text.strip()):
             if current_question:
                 questions.append((current_question, []))  # Images will be added later
             current_question = text
             list_counter = {}  # Reset list counter for new question
 
-        elif OPTION_LABEL_RE.match(text) or current_question:
+        elif OPTION_LABEL_RE.match(para.text) or current_question:
             current_question += "\n" + text
 
     if current_question:
@@ -620,12 +642,10 @@ def add_image_to_docx_cell(cell, image_data):
         
     except Exception as e:
         print(f"Error adding image to DOCX: {e}")
-        # Add error message instead of image
-        error_para = cell.add_paragraph()
-        error_para.add_run(f"[Image could not be loaded: {str(e)}]")
 
 def process_question_block(block, positive, negative):
     block_text, images = block
+    # Accept formatted text (with tags)
     lines = [line for line in block_text.split("\n") if line.strip()]
     opts = []
     raw_options = []
@@ -712,8 +732,46 @@ def process_question_block(block, positive, negative):
         "Question Number": q_num
     }
 
+def add_formatted_text_to_docx_paragraph(paragraph, formatted_text):
+    """
+    Add formatted text with <b>, <i>, <u> tags to a docx paragraph.
+    This parser does not write any tags to the document.
+    """
+    import re
+    # Pattern to match tags and text
+    token_re = re.compile(r'(<(/?)(b|i|u)>)|([^<]+)')
+    # Formatting state
+    bold = False
+    italic = False
+    underline = False
+    for match in token_re.finditer(formatted_text):
+        tag, closing, tag_type, text = match.groups()
+        if tag:
+            # It's a tag
+            if closing:
+                # Closing tag
+                if tag_type == 'b':
+                    bold = False
+                elif tag_type == 'i':
+                    italic = False
+                elif tag_type == 'u':
+                    underline = False
+            else:
+                # Opening tag
+                if tag_type == 'b':
+                    bold = True
+                elif tag_type == 'i':
+                    italic = True
+                elif tag_type == 'u':
+                    underline = True
+        elif text:
+            # It's text
+            run = paragraph.add_run(text)
+            run.bold = bold
+            run.italic = italic
+            run.underline = underline
+
 def generate_docx(questions, bold_question=False):
-    """Enhanced DOCX generation with better image handling"""
     document = Document()
     doc_stream = BytesIO()
     
@@ -752,17 +810,16 @@ def generate_docx(questions, bold_question=False):
             
             # Add new content with preserved formatting
             p = row.cells[1].add_paragraph()
-            
-            if label == "Question" and bold_question:
-                run = p.add_run(value)
-                run.bold = True
+            # Use formatted text for Question, Options, Solution
+            if label == "Question":
+                add_formatted_text_to_docx_paragraph(p, value)
+                if bold_question:
+                    for run in p.runs:
+                        run.bold = True
             elif label.startswith("Option"):
-                # Add option text with original formatting
-                for line in value.split('\n'):
-                    p.add_run(line)
-                # Remove last break if exists
-                if p.runs and not p.runs[-1].text:
-                    p._element.remove(p.runs[-1]._element)
+                add_formatted_text_to_docx_paragraph(p, value)
+            elif label == "Solution":
+                add_formatted_text_to_docx_paragraph(p, value)
             else:
                 p.add_run(value)
 
@@ -780,8 +837,13 @@ def generate_docx(questions, bold_question=False):
     doc_stream.seek(0)
     return doc_stream
 
+def htmlify(text):
+    """Convert <b>, <i>, <u> tags to HTML for ReportLab Paragraph."""
+    return text.replace("<b>", "<b>").replace("</b>", "</b>") \
+               .replace("<i>", "<i>").replace("</i>", "</i>") \
+               .replace("<u>", "<u>").replace("</u>", "</u>")
+
 def generate_pdf(questions, bold_question=False):
-    """Enhanced PDF generation with better image handling"""
     pdf_stream = BytesIO()
     doc = SimpleDocTemplate(pdf_stream, pagesize=letter)
     styles = getSampleStyleSheet()
@@ -819,7 +881,7 @@ def generate_pdf(questions, bold_question=False):
 
         # Create question text with images
         question_elements = []
-        question_elements.append(Paragraph(format_text_with_linebreaks(data["Question"]), bold_style if bold_question else normal_style))
+        question_elements.append(Paragraph(htmlify(format_text_with_linebreaks(data["Question"])), bold_style if bold_question else normal_style))
         
         # Add images after question text
         if data.get("Images"):
@@ -852,12 +914,12 @@ def generate_pdf(questions, bold_question=False):
         table_data = [
             ["Question", question_elements],
             ["Type", data["Type"]],
-            ["Option A", Paragraph(data["Options"][0], normal_style)],
-            ["Option B", Paragraph(data["Options"][1], normal_style)],
-            ["Option C", Paragraph(data["Options"][2], normal_style)],
-            ["Option D", Paragraph(data["Options"][3], normal_style)],
+            ["Option A", Paragraph(htmlify(data["Options"][0]), normal_style)],
+            ["Option B", Paragraph(htmlify(data["Options"][1]), normal_style)],
+            ["Option C", Paragraph(htmlify(data["Options"][2]), normal_style)],
+            ["Option D", Paragraph(htmlify(data["Options"][3]), normal_style)],
             ["Answer", data["Answer"]],
-            ["Solution", Paragraph(format_text_with_linebreaks(data["Solution"]), normal_style)],
+            ["Solution", Paragraph(htmlify(format_text_with_linebreaks(data["Solution"])), normal_style)],
             ["Positive Marks", data["Positive Marks"]],
             ["Negative Marks", data["Negative Marks"]]
         ]
