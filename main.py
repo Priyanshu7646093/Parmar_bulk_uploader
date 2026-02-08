@@ -35,6 +35,13 @@ uploaded_data = {
 OPTION_LABEL_RE = re.compile(r"^\s*[\(\[]?(\d{1,2}|[A-Za-z]|[ivxlcdmIVXLCDM]{1,4})[\)\.\]]\s*")
 OPTION_LABEL_RE_5 = re.compile(r"^\s*[\(\[]?(\d{1,2}|[A-Za-z]|[ivxlcdmIVXLCDM]{1,5})[\)\.\]]\s*")
 
+
+def strip_tags(s):
+    """Remove simple HTML-like tags (e.g. <b>, <i>, <u>) for pattern matching."""
+    if not s:
+        return s
+    return re.sub(r'<[^>]+>', '', s)
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -596,9 +603,9 @@ def process_question_block(block, positive, negative):
     sol_lines = []
     question_lines = []
     
-    # Extract question number
+    # Extract question number (match against tag-stripped text)
     q_num = ""
-    q_num_match = re.match(r"^(Q\d{1,9})\.", block_text.strip())
+    q_num_match = re.match(r"^(Q\d{1,9})\.", strip_tags(block_text).strip())
     if q_num_match:
         q_num = q_num_match.group(1)
 
@@ -607,20 +614,22 @@ def process_question_block(block, positive, negative):
     capturing_solution = False
 
     for line in lines:
-        if OPTION_LABEL_RE.match(line) and not capturing_solution:
+        stripped_line = strip_tags(line).strip()
+
+        if OPTION_LABEL_RE.match(stripped_line) and not capturing_solution:
             capturing_question = False
             capturing_solution = False
             raw_options.append(line)
-            opts.append(line)  # Keep the full option line with label
+            opts.append(line)  # Keep the full (possibly formatted) option line with label
             capturing_option_index = len(opts) - 1
 
-        elif capturing_option_index != -1 and not line.lower().startswith(("correct answer", "solution")):
-            # Append to current option with line break
+        elif capturing_option_index != -1 and not stripped_line.lower().startswith(("correct answer", "solution")):
+            # Append to current option with line break (preserve formatting)
             opts[capturing_option_index] += "\n" + line
             raw_options[-1] += "\n" + line
 
-        elif line.lower().startswith("correct answer"):
-            answer_text = line.split(":", 1)[-1].strip()
+        elif stripped_line.lower().startswith("correct answer"):
+            answer_text = stripped_line.split(":", 1)[-1].strip()
             ans_match = re.search(r"\b([A-Da-d1-4])\b", answer_text)
             if ans_match:
                 ans_val = ans_match.group(1).upper()
@@ -631,7 +640,7 @@ def process_question_block(block, positive, negative):
             capturing_option_index = -1
             capturing_solution = False
 
-        elif line.lower().startswith("solution"):
+        elif stripped_line.lower().startswith("solution"):
             sol_lines.append(line.split(":", 1)[-1].strip())
             capturing_solution = True
             capturing_option_index = -1
@@ -640,7 +649,11 @@ def process_question_block(block, positive, negative):
             sol_lines.append(line.strip())
 
         elif capturing_question:
-            line = re.sub(r"^Q\d{1,9}\.\s*", "", line)
+            # Remove any leading Q label even if wrapped in simple tags
+            line = re.sub(r'^(?:\s|<[^>]+>|</[^>]+>)*Q\d{1,9}\.\s*', '', line, flags=re.IGNORECASE)
+            # Fallback: also try a simpler removal using stripped text
+            if re.match(r'^Q\d{1,9}\.', strip_tags(line).strip()):
+                line = re.sub(r'^Q\d{1,9}\.\s*', '', strip_tags(line)).strip()
             question_lines.append(line)
 
     # Handle options - last 4 become the actual options
@@ -648,14 +661,16 @@ def process_question_block(block, positive, negative):
         # Keep original (labeled) versions of all extra options in question text
         question_lines.extend(raw_options[:-4])
         
-        # For the final 4 options, strip the numbering
+        # For the final 4 options, strip the numbering even if wrapped in tags
+        label_strip_re = re.compile(r'^(?:\s|<[^>]+>|</[^>]+>)*[\(\[]?(?:\d{1,2}|[A-Za-z]|[ivxlcdmIVXLCDM]{1,5})[\)\.\]]\s*', flags=re.IGNORECASE)
         final_options = [
-            OPTION_LABEL_RE.sub("", opt.strip()).strip()
+            label_strip_re.sub("", opt).strip()
             for opt in raw_options[-4:]
         ]
     else:
+        label_strip_re = re.compile(r'^(?:\s|<[^>]+>|</[^>]+>)*[\(\[]?(?:\d{1,2}|[A-Za-z]|[ivxlcdmIVXLCDM]{1,5})[\)\.\]]\s*', flags=re.IGNORECASE)
         final_options = [
-            OPTION_LABEL_RE.sub("", opt.strip()).strip()
+            label_strip_re.sub("", opt).strip()
             for opt in raw_options
         ] + [""] * (4 - len(raw_options))
 
@@ -937,7 +952,8 @@ def _do_upload(option_pattern, min_options):
 
     for i, block in enumerate(blocks):
         block_text = block[0] if isinstance(block, tuple) else block
-        match = re.match(pattern, block_text.strip())
+        stripped_block = strip_tags(block_text).strip()
+        match = re.match(pattern, stripped_block)
         if match:
             num = int(match.group(1))
             base_numbers.append(num)
@@ -952,13 +968,13 @@ def _do_upload(option_pattern, min_options):
             # Only count options BEFORE the "Correct Answer" or "Solution" section
             filtered_lines = []
             for line in lines:
-                lower = line.lower()
+                lower = strip_tags(line).lower()
                 if lower.startswith("correct answer") or lower.startswith("solution"):
                     break
                 filtered_lines.append(line)
 
             # Now count valid option-like lines only before solution/answer
-            option_like_lines = [line for line in filtered_lines if option_pattern.match(line)]
+            option_like_lines = [line for line in filtered_lines if option_pattern.match(strip_tags(line))]
             if len(option_like_lines) < min_options:
                 option_issues.append(f"Q{num} has only {len(option_like_lines)} option(s)")
             # ✅ Don't warn for more than expected options
@@ -974,7 +990,8 @@ def _do_upload(option_pattern, min_options):
     questions_to_generate = 0
     for block in blocks:
         block_text = block[0] if isinstance(block, tuple) else block
-        match = re.match(pattern, block_text.strip())
+        stripped_block = strip_tags(block_text).strip()
+        match = re.match(pattern, stripped_block)
         if match:
             q_num = int(match.group(1))
             if uploaded_data["range_start"] <= q_num <= uploaded_data["range_end"]:
@@ -1039,7 +1056,8 @@ def generate():
 
     for block in blocks:
         block_text = block[0] if isinstance(block, tuple) else block
-        match = re.match(pattern, block_text.strip())
+        stripped_block = strip_tags(block_text).strip()
+        match = re.match(pattern, stripped_block)
         if match:
             q_num = int(match.group(1))
             if range_start <= q_num <= range_end:
