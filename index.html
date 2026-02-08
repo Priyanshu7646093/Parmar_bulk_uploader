@@ -133,7 +133,7 @@
     </div>
   </section>
 -->
-  <div class="container" id="uploadForm">
+  <div class="container" id="quizContainer">
     <h1 class="form-title">Create Your Quiz</h1>
 
     <form id="uploadForm" method="POST" action="/upload" enctype="multipart/form-data">
@@ -225,6 +225,27 @@
         <label for="generate_all">Process whole doc at once</label>
       </div>
 
+      <div class="divider-line">Quiz Options</div>
+
+      <div class="form-group">
+        <label><i class="fas fa-list"></i> Number of Options
+          <div class="tooltip">
+            <i class="fas fa-question-circle"></i>
+            <span class="tooltip-text">Select whether your questions have 4 or 5 options</span>
+          </div>
+        </label>
+        <div class="radio-group">
+          <div class="radio-option">
+            <input type="radio" id="option_4" name="option_count" value="4" checked />
+            <label for="option_4">4 Options (A, B, C, D)</label>
+          </div>
+          <div class="radio-option">
+            <input type="radio" id="option_5" name="option_count" value="5" />
+            <label for="option_5">5 Options (A, B, C, D, E)</label>
+          </div>
+        </div>
+      </div>
+
       <div class="divider-line">Process a specific range</div>
 
       <div class="form-grid">
@@ -277,7 +298,6 @@
       </div>
     </div>
   </div>
-
   <section class="testimonial-section" id="testimonials">
     <h2 class="section-title">What Educators Say</h2>
     <div class="testimonials">
@@ -694,6 +714,11 @@
         alert('Please upload a PDF file first');
         return;
       }
+
+      // Determine which endpoint to use based on option count
+      const optionCount = document.querySelector('input[name="option_count"]:checked').value;
+      const action = optionCount === '5' ? '/upload5' : '/upload';
+      this.action = action;
 
       // Show loading state
       const submitButton = this.querySelector('button[type="submit"]');

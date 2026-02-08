@@ -245,6 +245,7 @@
 
       <form action="/generate" method="post" class="form-buttons">
         <input type="hidden" name="format" value="{{ request.form.format or 'docx' }}" />
+        <input type="hidden" name="option_count" value="{{ option_count or '4' }}" />
         <button type="submit" name="confirm" value="yes" class="btn btn-confirm">
           <i class="fas fa-check"></i>
           Confirm & Generate

@@ -32,8 +32,7 @@ uploaded_data = {
 }
 
 # ✅ Universal option pattern (allows leading whitespace)
-OPTION_LABEL_RE = re.compile(r"^\s*[\(\[]?(\d{1,2}|[A-Za-z]|[ivxlcdmIVXLCDM]{1,4})[\)\.\]]\s*")
-OPTION_LABEL_RE_5 = re.compile(r"^\s*[\(\[]?(\d{1,2}|[A-Za-z]|[ivxlcdmIVXLCDM]{1,5})[\)\.\]]\s*")
+OPTION_LABEL_RE = re.compile(r"^\s*[\(\[]?(\d{1,2}|[A-Za-z]|[ivxlcdmIVXLCDM]{1,5})[\)\.\]]\s*")
 
 @app.route('/')
 def index():
@@ -621,10 +620,10 @@ def process_question_block(block, positive, negative):
 
         elif line.lower().startswith("correct answer"):
             answer_text = line.split(":", 1)[-1].strip()
-            ans_match = re.search(r"\b([A-Da-d1-4])\b", answer_text)
+            ans_match = re.search(r"\b([A-Ea-e1-5])\b", answer_text)
             if ans_match:
                 ans_val = ans_match.group(1).upper()
-                if ans_val in 'ABCD':
+                if ans_val in 'ABCDE':
                     ans = str(ord(ans_val) - ord('A') + 1)
                 else:
                     ans = ans_val
@@ -644,20 +643,20 @@ def process_question_block(block, positive, negative):
             question_lines.append(line)
 
     # Handle options - last 4 become the actual options
-    if len(opts) > 4:
+    if len(opts) > 5:
         # Keep original (labeled) versions of all extra options in question text
-        question_lines.extend(raw_options[:-4])
+        question_lines.extend(raw_options[:-5])
         
         # For the final 4 options, strip the numbering
         final_options = [
             OPTION_LABEL_RE.sub("", opt.strip()).strip()
-            for opt in raw_options[-4:]
+            for opt in raw_options[-5:]
         ]
     else:
         final_options = [
             OPTION_LABEL_RE.sub("", opt.strip()).strip()
             for opt in raw_options
-        ] + [""] * (4 - len(raw_options))
+        ] + [""] * (5 - len(raw_options))
 
     # Join question lines with line breaks
     q = "\n".join(question_lines)
@@ -723,19 +722,19 @@ def generate_docx(questions, bold_question=False):
     for question_index, data in enumerate(questions):
         print(f"Processing question {question_index + 1}: {data.get('Question Number', 'Unknown')}")
         
-        table = document.add_table(rows=10, cols=2)
+        table = document.add_table(rows=11, cols=2)
         table.autofit = False
         force_table_indent_and_widths(table)
         set_table_borders(table)
 
-        labels = ["Question", "Type", "Option", "Option", "Option", "Option",
+        labels = ["Question", "Type", "Option", "Option", "Option", "Option", "Option",
                 "Answer", "Solution", "Positive Marks", "Negative Marks"]
         
         # Prepare values with proper line breaks
         values = [
             data["Question"], 
             data["Type"],
-            *data["Options"][:4],  # Unpack the 4 options
+            *data["Options"][:5],  # Unpack the 5 options
             data["Answer"], 
             data["Solution"], 
             data["Positive Marks"], 
@@ -799,7 +798,7 @@ def generate_pdf(questions, bold_question=False):
             'BoldQuestion',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=11,
+            fontSize=12,
             textColor=colors.red,
         )
 
@@ -814,8 +813,8 @@ def generate_pdf(questions, bold_question=False):
             patterns = [
                 r"\s([A-Za-z]\.)",
                 r"\s(\d{1,2}\.)",
-                r"\s([ivxlcdm]{1,4}\.)",
-                r"\s([IVXLCDM]{1,4}\.)"
+                r"\s([ivxlcdm]{1,5}\.)",
+                r"\s([IVXLCDM]{1,5}\.)"
             ]
 
             for pattern in patterns:
@@ -861,6 +860,7 @@ def generate_pdf(questions, bold_question=False):
             ["Option B", Paragraph(htmlify(data["Options"][1]), normal_style)],
             ["Option C", Paragraph(htmlify(data["Options"][2]), normal_style)],
             ["Option D", Paragraph(htmlify(data["Options"][3]), normal_style)],
+            ["Option E", Paragraph(htmlify(data["Options"][4]), normal_style)],
             ["Answer", data["Answer"]],
             ["Solution", Paragraph(htmlify(format_text_with_linebreaks(data["Solution"])), normal_style)],
             ["Positive Marks", data["Positive Marks"]],
@@ -885,20 +885,14 @@ def generate_pdf(questions, bold_question=False):
     pdf_stream.seek(0)
     return pdf_stream
 
-def _do_upload(option_pattern, min_options):
-    """
-    Helper function to handle file upload with configurable option pattern and minimum option count.
-    
-    Args:
-        option_pattern: Compiled regex pattern for matching option labels
-        min_options: Minimum number of options to expect (4 or 5)
-    """
+@app.route('/upload', methods=['POST'])
+def upload():
     file = request.files['pdf_file']
     filename = file.filename.lower()
     uploaded_data["original_filename"] = filename.rsplit('.', 1)[0]
     uploaded_data["positive"] = request.form.get('positive', '2')
     uploaded_data["negative"] = request.form.get('negative', '0.25')
-    uploaded_data["option_count"] = str(min_options)  # Store which version is being used
+    uploaded_data["option_count"] = "5"  # This is main5option.py, so it's always 5 options
     bold_question = request.form.get('bold_question', 'no') == 'yes'
     uploaded_data["bold_question"] = bold_question
 
@@ -958,10 +952,10 @@ def _do_upload(option_pattern, min_options):
                 filtered_lines.append(line)
 
             # Now count valid option-like lines only before solution/answer
-            option_like_lines = [line for line in filtered_lines if option_pattern.match(line)]
-            if len(option_like_lines) < min_options:
+            option_like_lines = [line for line in filtered_lines if OPTION_LABEL_RE.match(line)]
+            if len(option_like_lines) < 5:
                 option_issues.append(f"Q{num} has only {len(option_like_lines)} option(s)")
-            # ✅ Don't warn for more than expected options
+            # ✅ Don't warn for more than 5 options
 
     # ✅ Repeated questions
     counts = Counter(base_numbers)
@@ -1006,17 +1000,8 @@ def _do_upload(option_pattern, min_options):
         gen_start=gen_start,
         gen_end=gen_end,
         multi_page_warnings=multi_page_warnings,
-        option_count=uploaded_data.get("option_count", "4")
+        option_count=uploaded_data.get("option_count", "5")
     )
-
-@app.route('/upload', methods=['POST'])
-def upload():
-    return _do_upload(OPTION_LABEL_RE, 4)
-
-@app.route('/upload5', methods=['POST'])
-def upload5():
-    return _do_upload(OPTION_LABEL_RE_5, 5)
-
 
 @app.route('/generate', methods=['POST'])
 def generate():
