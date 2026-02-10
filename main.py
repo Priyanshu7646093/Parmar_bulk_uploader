@@ -20,7 +20,7 @@ def index():
 def upload_4options():
     """Route 4-option selections to Four_option.py logic"""
     # Import and use Four_option's functions
-    from Four_option import upload, uploaded_data as main_data
+    from bulk_uploader.Four_option import upload, uploaded_data as main_data
 
     # Call Four_option's upload function
     result = upload()
@@ -30,7 +30,7 @@ def upload_4options():
 def upload_5options():
     """Route 5-option selections to Five_option.py logic"""
     # Import and use Five_option's functions
-    from Five_option import upload, uploaded_data as main5_data
+    from bulk_uploader.Five_option import upload, uploaded_data as main5_data
 
     # Call Five_option's upload function
     result = upload()
@@ -44,10 +44,10 @@ def generate():
     option_count = request.form.get('option_count', '4')
     
     if option_count == '5':
-        from Five_option import generate as generate_main5
+        from bulk_uploader.Five_option import generate as generate_main5
         return generate_main5()
     else:
-        from Four_option import generate as generate_main
+        from bulk_uploader.Four_option import generate as generate_main
         return generate_main()
 
 @app.route('/diagnose', methods=['GET'])

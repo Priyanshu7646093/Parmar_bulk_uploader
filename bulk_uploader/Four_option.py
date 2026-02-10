@@ -517,7 +517,7 @@ def extract_questions_from_pdf(pdf_data):
             elif current_question:
                 # Accumulate lines for current question
                 current_question += '\n' + line
-    
+
     # Add last question if exists
     if current_question:
         questions_text.append(current_question)
