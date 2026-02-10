@@ -4,7 +4,7 @@
 import re
 from pathlib import Path
 
-# Copy the OPTION_LABEL_RE from main5option.py
+# Copy the OPTION_LABEL_RE from Five_option.py
 OPTION_LABEL_RE = re.compile(r"^\s*[\(\[]?(\d{1,2}|[A-Za-z]|[ivxlcdmIVXLCDM]{1,5})[\)\.\]]\s*")
 
 # Test data - you can modify this with your actual question text

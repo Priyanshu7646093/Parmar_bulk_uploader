@@ -1,6 +1,6 @@
 """
 Unified Flask Application Launcher
-Routes requests to main.py (4 options) or main5option.py (5 options)
+Routes requests to Four_option.py (4 options) or Five_option.py (5 options)
 based on user selection from the homepage
 """
 
@@ -18,21 +18,21 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_4options():
-    """Route 4-option selections to main.py logic"""
-    # Import and use main.py's functions
-    from main import upload, uploaded_data as main_data
-    
-    # Call main.py's upload function
+    """Route 4-option selections to Four_option.py logic"""
+    # Import and use Four_option's functions
+    from Four_option import upload, uploaded_data as main_data
+
+    # Call Four_option's upload function
     result = upload()
     return result
 
 @app.route('/upload5', methods=['POST'])
 def upload_5options():
-    """Route 5-option selections to main5option.py logic"""
-    # Import and use main5option.py's functions
-    from main5option import upload, uploaded_data as main5_data
-    
-    # Call main5option.py's upload function
+    """Route 5-option selections to Five_option.py logic"""
+    # Import and use Five_option's functions
+    from Five_option import upload, uploaded_data as main5_data
+
+    # Call Five_option's upload function
     result = upload()
     return result
 
@@ -44,10 +44,10 @@ def generate():
     option_count = request.form.get('option_count', '4')
     
     if option_count == '5':
-        from main5option import generate as generate_main5
+        from Five_option import generate as generate_main5
         return generate_main5()
     else:
-        from main import generate as generate_main
+        from Four_option import generate as generate_main
         return generate_main()
 
 @app.route('/diagnose', methods=['GET'])

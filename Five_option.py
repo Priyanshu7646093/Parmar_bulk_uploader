@@ -907,7 +907,7 @@ def upload():
     uploaded_data["original_filename"] = filename.rsplit('.', 1)[0]
     uploaded_data["positive"] = request.form.get('positive', '2')
     uploaded_data["negative"] = request.form.get('negative', '0.25')
-    uploaded_data["option_count"] = "5"  # This is main5option.py, so it's always 5 options
+    uploaded_data["option_count"] = "5"  # This module handles 5 options
     bold_question = request.form.get('bold_question', 'no') == 'yes'
     uploaded_data["bold_question"] = bold_question
 
